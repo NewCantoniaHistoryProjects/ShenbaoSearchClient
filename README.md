@@ -20,6 +20,10 @@ Before running the project, you need to:
 Run the following command to download the Shenbao text files:
 ```bash
 git clone https://github.com/moss-on-stone/shenbao-txt.git
+```
 
 ### Run the client
+Start the client via:
+```bash
 python SearchClient.py
+```
