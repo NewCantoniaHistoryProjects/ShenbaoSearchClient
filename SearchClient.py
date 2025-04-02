@@ -12,36 +12,29 @@ class ShenbaoSearchApp:
         self.root.title("Shenbao Newspaper Search")
         self.root.geometry("1200x800")
         
-        # Directory containing text files
         self.txt_dir = Path("shenbao-txt/txt")
         self.recent_searches_file = Path("recent_searches.txt")
         self.years = self.get_year_range()
         
-        # Check if text folder is set up correctly
         if not self.check_text_folder():
             return
         
-        # Load recent searches
         self.recent_searches = self.load_recent_searches()
-        
-        # GUI Elements
         self.create_widgets()
         
-        # Search results queue and storage
         self.result_queue = Queue()
         self.results = []
         self.processed_files = set()
         self.sort_ascending = True
         self.search_thread = None
+        self.file_buttons = []  # Store buttons for cleanup
 
     def check_text_folder(self):
-        """Check if the text folder exists and contains .txt files."""
         if not self.txt_dir.exists() or not self.txt_dir.is_dir():
             messagebox.showerror(
                 "Setup Error",
                 "The 'shenbao-txt/txt' directory is missing.\n\n"
-                "Please run the following command to set it up:\n"
-                "git clone https://github.com/moss-on-stone/shenbao-txt.git\n\n"
+                "Please run: git clone https://github.com/moss-on-stone/shenbao-txt.git\n"
                 "Then restart the application."
             )
             self.root.quit()
@@ -50,8 +43,7 @@ class ShenbaoSearchApp:
             messagebox.showerror(
                 "Setup Error",
                 "No .txt files found in 'shenbao-txt/txt'.\n\n"
-                "Ensure you have cloned the repository correctly:\n"
-                "git clone https://github.com/moss-on-stone/shenbao-txt.git\n\n"
+                "Ensure you cloned: git clone https://github.com/moss-on-stone/shenbao-txt.git\n"
                 "Then restart the application."
             )
             self.root.quit()
@@ -59,7 +51,6 @@ class ShenbaoSearchApp:
         return True
 
     def get_year_range(self):
-        """Get the range of years from filenames."""
         years = set()
         for file in self.txt_dir.glob("*.txt"):
             year = int(str(file.name)[:4])
@@ -67,34 +58,29 @@ class ShenbaoSearchApp:
         return sorted(years)
 
     def load_recent_searches(self):
-        """Load the last 5 search keywords from file."""
         if self.recent_searches_file.exists():
             with open(self.recent_searches_file, 'r', encoding='utf-8') as f:
                 return [line.strip() for line in f.readlines() if line.strip()][-5:]
         return []
 
     def save_recent_searches(self, keyword):
-        """Save the latest keyword to the recent searches file, keeping only 5."""
         if keyword in self.recent_searches:
             self.recent_searches.remove(keyword)
         self.recent_searches.append(keyword)
-        self.recent_searches = self.recent_searches[-5:]  # Keep last 5
+        self.recent_searches = self.recent_searches[-5:]
         with open(self.recent_searches_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(self.recent_searches))
         self.update_recent_search_buttons()
 
     def create_widgets(self):
-        # Search frame
         search_frame = ttk.Frame(self.root, padding="10")
         search_frame.pack(fill="x")
 
-        # Keyword entry
         ttk.Label(search_frame, text="Keyword:").grid(row=0, column=0, padx=5)
         self.keyword_entry = ttk.Entry(search_frame, width=30)
         self.keyword_entry.grid(row=0, column=1, padx=5)
         self.keyword_entry.bind("<Return>", lambda e: self.start_search())
 
-        # Search mode radio buttons
         self.search_mode = tk.StringVar(value="regex")
         ttk.Radiobutton(search_frame, text="Regex", variable=self.search_mode, 
                        value="regex").grid(row=0, column=2, padx=5)
@@ -103,15 +89,12 @@ class ShenbaoSearchApp:
         ttk.Radiobutton(search_frame, text="Vague", variable=self.search_mode, 
                        value="vague").grid(row=0, column=4, padx=5)
 
-        # Search button
         self.search_button = ttk.Button(search_frame, text="Search", command=self.start_search)
         self.search_button.grid(row=0, column=5, padx=5)
 
-        # Sort toggle button
         self.sort_button = ttk.Button(search_frame, text="Sort Ascending", command=self.toggle_sort)
         self.sort_button.grid(row=0, column=6, padx=5)
 
-        # Year filter
         ttk.Label(search_frame, text="Year From:").grid(row=1, column=0, pady=5)
         self.year_from = ttk.Combobox(search_frame, values=[str(y) for y in self.years], width=6)
         self.year_from.grid(row=1, column=1)
@@ -122,28 +105,27 @@ class ShenbaoSearchApp:
         self.year_to.grid(row=1, column=4)
         ttk.Button(search_frame, text="Reset", command=self.reset_year_to).grid(row=1, column=5, padx=5)
 
-        # Recent searches frame
         recent_frame = ttk.Frame(self.root, padding="10")
         recent_frame.pack(fill="x")
         ttk.Label(recent_frame, text="Recent Searches:").pack(side="left")
         self.recent_buttons = []
         self.update_recent_search_buttons()
 
-        # Results display
-        self.results_text = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, width=90, height=30)
-        self.results_text.pack(padx=10, pady=10, fill="both", expand=True)
+        # Frame for results with scrollbar
+        self.results_frame = ttk.Frame(self.root, padding="10")
+        self.results_frame.pack(fill="both", expand=True)
+        self.results_text = scrolledtext.ScrolledText(self.results_frame, wrap=tk.WORD, width=90, height=30)
+        self.results_text.pack(side="left", fill="both", expand=True)
 
-        # Progress label
         self.progress = ttk.Label(self.root, text="")
         self.progress.pack(pady=5)
 
     def update_recent_search_buttons(self):
-        """Update the buttons for recent searches."""
         for button in self.recent_buttons:
             button.destroy()
         self.recent_buttons.clear()
         
-        recent_frame = self.root.winfo_children()[1]  # Get the recent_frame (second child after search_frame)
+        recent_frame = self.root.winfo_children()[1]
         for i, keyword in enumerate(self.recent_searches):
             button = ttk.Button(recent_frame, text=keyword, 
                               command=lambda k=keyword: self.reuse_search(k))
@@ -151,7 +133,6 @@ class ShenbaoSearchApp:
             self.recent_buttons.append(button)
 
     def reuse_search(self, keyword):
-        """Reuse a recent search keyword."""
         self.keyword_entry.delete(0, tk.END)
         self.keyword_entry.insert(0, keyword)
         self.start_search()
@@ -176,18 +157,16 @@ class ShenbaoSearchApp:
             return
 
         self.results_text.delete(1.0, tk.END)
+        self.clear_file_buttons()  # Clear previous buttons
         self.progress.config(text="Searching...")
         self.results = []
         self.processed_files.clear()
         
-        # Save the keyword to recent searches
         self.save_recent_searches(keyword)
         
-        # Clear queue
         while not self.result_queue.empty():
             self.result_queue.get()
 
-        # Start search in a separate thread
         self.search_button.config(state="disabled")
         self.search_thread = Thread(target=self.search_files, args=(keyword,), daemon=True)
         self.search_thread.start()
@@ -241,15 +220,43 @@ class ShenbaoSearchApp:
 
         self.result_queue.put(("done", total_files))
 
+    def open_file(self, filename):
+        """Open the text file in the default system editor."""
+        file_path = self.txt_dir / filename
+        try:
+            if os.name == 'nt':  # Windows
+                os.startfile(str(file_path))
+            else:  # macOS or Linux
+                opener = 'open' if os.uname().sysname == 'Darwin' else 'xdg-open'
+                os.system(f"{opener} {str(file_path)}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open {filename}: {e}")
+
+    def clear_file_buttons(self):
+        """Remove all existing file buttons."""
+        for button in self.file_buttons:
+            button.destroy()
+        self.file_buttons.clear()
+
     def display_results(self):
         self.results_text.delete(1.0, tk.END)
+        self.clear_file_buttons()
         if not self.results:
             return
 
         sorted_results = sorted(self.results, key=lambda x: int(x[0][:4]), reverse=not self.sort_ascending)
 
         for filename, matches in sorted_results:
-            self.results_text.insert(tk.END, f"\nFile: {filename}\n", "bold")
+            # Insert filename with bold formatting
+            self.results_text.insert(tk.END, f"\nFile: {filename} ", "bold")
+            # Add an "Open" button next to the filename
+            button = ttk.Button(self.results_frame, text="Open", 
+                              command=lambda fn=filename: self.open_file(fn))
+            button_window = self.results_text.window_create(tk.END, window=button)
+            self.file_buttons.append(button)
+            self.results_text.insert(tk.END, "\n")
+            
+            # List matches below the filename
             for page, match, context in matches:
                 display_text = f"Page {page}: ...{context}...\n"
                 self.results_text.insert(tk.END, display_text)
